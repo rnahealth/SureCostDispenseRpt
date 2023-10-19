@@ -1,0 +1,427 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Rebex.Net;
+using Rebex.Legacy;
+using System.Threading;
+using System.Diagnostics;
+using System.IO;
+using Renci.SshNet;
+using Renci.SshNet.Sftp;
+using Nondbfct;
+
+namespace SureCostDispenseRpt
+{
+
+    public class  RnaSFTPCommunication
+    {
+        public string m_url { get; set; }
+        public string m_pwd { get; set; }
+        public string m_usr { get; set; }
+        public int m_portnum { get; set; }
+        public string m_ssh_privatekeyfilename { get; set; }
+        public string m_passphrase { get; set; }
+        public bool m_isConnected { get; set; }
+        public string m_localPath { get; set; }
+        public string m_localFilename { get; set; }
+        public string m_romotepath { get; set; }
+        public string m_romoteFilename { get; set; }
+        public string debugLogging { get; set; }
+        private Sftp m_sftp;                         // SFTP session
+        private bool m_isWorking;                    // determines whether any operation is running
+        private string m_ftprootDir;
+        Nondbfct.Nondbfct _nonDbf = new Nondbfct.Nondbfct();
+//        string[] arg_array;
+        public RnaSFTPCommunication()
+        {
+            m_sftp = new Sftp();
+            m_url = ""; //urlAddress;
+            m_pwd = "";// password;
+            m_usr = "";// loginid;
+            //PORT NUMBER
+
+            //if (_nonDbf.isNumric(portnum.Trim(), portnum.Trim().Length))
+            //    m_portnum = Convert.ToInt32(portnum.Trim());
+            //else
+            m_portnum = 22;
+            m_ssh_privatekeyfilename = "";
+            m_isConnected = false;
+            m_localPath = "";
+            m_localFilename = "";
+            m_romotepath = "";
+            m_romoteFilename = "";
+            m_isWorking = false;
+            m_ftprootDir = "";
+            m_passphrase = "";
+        }
+        ~RnaSFTPCommunication()
+        {
+            Dispose_disconnect_sftp();
+        }
+        public void Dispose_disconnect_sftp()
+        {
+            if (m_sftp != null)
+            {
+                m_sftp.Disconnect();
+                m_sftp.Dispose();
+                m_sftp = null;
+                m_isWorking = false;
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+            }
+        }
+
+        public void disconnect_sftp()
+        {
+            if (m_sftp != null)
+            {
+                m_sftp.Disconnect();
+                m_isWorking = false;
+            }
+        }
+
+        public int connect_sftp()
+        {
+            bool l_sshProtocal = false;
+            SshPrivateKey privateKey = null;
+            if (m_sftp.State == SftpState.Connected)
+            {
+                if (m_isWorking == true)
+                    return (-5);
+                m_sftp.Disconnect();
+            }
+            if (m_url.Trim().Length <= 5)
+                return (-1);                 // url address error
+            if ( m_portnum <= 0)
+                return (-2);                 // portnumber error
+            if (m_usr.Trim() == "")
+                return (-3);                 // login or user name error
+            if (m_ssh_privatekeyfilename.Trim() == "")
+            {
+                l_sshProtocal = false;
+                if (m_pwd.Trim().Length <= 3)
+                    return (-4);  // password error
+            }
+            else
+                l_sshProtocal = true;
+            // create sftp object
+            try
+            {
+                m_sftp.Timeout = 30000;
+                m_sftp.Options |= SftpOptions.UseLargeBuffers;
+                if (l_sshProtocal == true)
+                {
+                    //***connet with ssh private key ( client should provide the public key(pair) to host server. **
+                    //Public key authentication:: You generate a key pair, consisting of a public 
+                    //key(which everybody is allowed to know) and a private key(which you keep secret and do not give to anybody). 
+                    //The private key is able to generate signatures.A signature created using your private key cannot be forged by 
+                    //anybody who does not have that key; but anybody who has your public key can verify that a particular signature is genuine.
+                    try
+                    {
+                        m_isWorking = true;
+                        // create client and conn
+                        m_sftp.Connect(m_url, m_portnum);
+                        //privateKey = new SshPrivateKey("c:\\ssh\\priv20181025.ppk", "");
+                        privateKey = new SshPrivateKey(m_ssh_privatekeyfilename, m_passphrase);
+                        // authenticate
+                        m_sftp.Login(m_usr, privateKey);
+                    }
+                    catch(Exception ex)
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Connect(IsCompleted)::" + ex.Message, "RnaSftpClient.txt");
+                        return (-1);
+                    }
+                    finally
+                    {
+                        m_isWorking = false;
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        m_isWorking = true;
+                        m_sftp.Connect(m_url, m_portnum);
+                  /*      IAsyncResult ar = m_sftp.BeginConnect(m_url, m_portnum, null, null, null);
+                        while (!ar.IsCompleted)
+                        {
+                            //Application.DoEvents();
+                            Thread.Sleep(100);
+                        }
+                        m_sftp.EndConnect(ar); */
+                    }
+                    catch (Exception ex)
+                    {
+                        //NEW CODE 03/27/2018 HABIB
+                        Nondbfct.Nondbfct.WriteLog("Connect(IsCompleted)::" + ex.Message, "RnaSftpClient.txt");
+                        return (-1);
+                    }
+                    finally
+                    {
+                        m_isWorking = false;
+                    }
+                    // login
+                    m_sftp.Login(m_usr, m_pwd);
+                }
+            }
+            catch (Exception ex)
+            {
+                Nondbfct.Nondbfct.WriteLog("Connect::" + ex.Message, "RnaSftpClient.txt");
+                if (m_sftp.State == SftpState.Connected)
+                    m_sftp.Disconnect();
+                return (-1);
+            }
+            finally
+            {
+                m_isWorking = false;
+            }
+            m_ftprootDir = m_sftp.GetCurrentDirectory();
+            return (0);
+        }
+
+        public int GetFile_sftp(string remote_file, string remote_path, string local_file, string local_path, string del_flag_str)
+        {
+            int del_flag;
+            int index_i = -1;
+
+            if (m_sftp.State != SftpState.Connected)
+            {
+                Nondbfct.Nondbfct.WriteLog("Get_file(not Connected):: ", "fileLost.txt");
+                return (-1);
+            }
+            if (m_isWorking)
+                return (0);
+
+            remote_path = remote_path.Replace('\\', '/');
+
+            // Remote File name
+            if (remote_file.Trim().Length <= 3)
+                return (-1);
+
+            // Remote File path
+            if (remote_path.Trim().Length == 0)
+                remote_path = "";
+            // Local File name
+            if (local_file.Trim().Length < 3)
+                return (-1);
+
+            // Local File path
+            if (local_path.Trim().Length < 3)
+                return (-1);
+
+            if (_nonDbf.isNumric(del_flag_str.Trim(), del_flag_str.Trim().Length))
+                del_flag = Convert.ToInt16(del_flag_str.Trim());
+            else
+                del_flag = 0;
+
+            string curr_dir = m_ftprootDir + remote_path;
+
+            if (remote_path.Length > 0)
+                if (remote_path.Substring(0, 1) == "/" || remote_path.Substring(0, 1) == "\\")
+                    curr_dir = remote_path;
+            try
+            {
+                m_sftp.ChangeDirectory(curr_dir);
+                curr_dir = m_sftp.GetCurrentDirectory();
+
+                index_i = remote_file.IndexOf("*");
+                if (index_i > 2)
+                {
+                    // retrieve and display the list of files and directories
+                    SftpItemCollection list = m_sftp.GetList();
+                    foreach (SftpItem item in list)
+                    {
+                        if (item.Type == SftpItemType.RegularFile)
+                        {
+                            if (item.Name.Length >= index_i)
+                            {
+                                if (item.Name.Substring(0, index_i) == remote_file.Substring(0, index_i))
+                                {
+                                    curr_dir = local_path + "\\" + local_file;
+                                    m_sftp.GetFile(item.Name, curr_dir);
+                                    if (m_sftp.FileExists(item.Name) && del_flag == 1)
+                                        m_sftp.DeleteFile(item.Name);
+                                    return (0);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // retrieve and display the list of files and directories
+                    if (m_sftp.FileExists(remote_file))
+                    {
+                        curr_dir = local_path + "\\" + local_file;
+                        m_sftp.GetFile(remote_file, curr_dir);
+                        if (del_flag == 1)
+                            m_sftp.DeleteFile(remote_file);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Nondbfct.Nondbfct.WriteLog("Get_file::" + ex.Message, "RnaSftpClient.txt");
+                return (-1);
+            }
+            return (0);
+        }
+
+        //*********************************  Put File into  SFTP  ***********************************
+        public int PutFile_sftp(string remote_file, string remote_path, string local_file, string local_path)
+        {
+            int imsdata = 0;
+            string tmp_str = "";
+            string LocalCurrentDirWFile = "";
+            string Remotecurr_dir = "";
+            if (m_sftp.State == SftpState.Connected)
+            {
+                Nondbfct.Nondbfct.WriteLog("Put_file(not Connected):: " , "fileLost.txt");
+                return (-1);
+            }
+            if (m_isWorking)
+                return (-1);
+
+            if (local_file.Length > 5)
+            {
+                if (local_file.Substring(local_file.Length - 4, 4) == ".IMS")
+                    imsdata = 1;
+            }
+            remote_path = remote_path.Replace('\\', '/').Trim();
+            remote_file = remote_file.Trim();
+            // Remote File name
+            if (remote_file.Length <= 3)
+                return (-1);
+
+            // Remote File path
+            if (remote_path.Length == 0)
+                remote_path = "";
+            tmp_str = remote_path + "/" + remote_file;
+
+            // Local File name
+            if (local_file.Trim().Length < 3)
+                return (-1);
+
+            // Local File path
+            if (local_path.Trim().Length < 3)
+                return (-1);
+
+            //remote_path =  "/out";
+            //remote_path =  "/rna/public";
+            //m_ftprootDir = /homedir
+
+            Remotecurr_dir = m_ftprootDir;
+
+            if (remote_path.Length > 0)
+            {
+                if (remote_path.Substring(0, 1) == "/" || remote_path.Substring(0, 1) == "\\")
+                    Remotecurr_dir = remote_path;
+                else if (Remotecurr_dir.Length == 1 && (Remotecurr_dir == "\\" || Remotecurr_dir == "/"))
+                    Remotecurr_dir = Remotecurr_dir + remote_path;
+                else
+                    Remotecurr_dir = Remotecurr_dir + "/" + remote_path;
+            }
+            try
+            {
+                m_sftp.ChangeDirectory(Remotecurr_dir);
+                tmp_str = m_sftp.GetCurrentDirectory();
+
+                LocalCurrentDirWFile = local_path + "\\" + local_file;
+                // upload a local file to server  N:\RNADATA\GA0412262018105750.txt
+                m_sftp.PutFile(LocalCurrentDirWFile, remote_file);
+                if (imsdata == 1)
+                    File.Delete(LocalCurrentDirWFile);
+
+                //NEW CODE 03/27/2018 HABIB
+                if (m_sftp.FileExists(remote_file) == false)
+                    Nondbfct.Nondbfct.WriteLog("Put_file(not exist):: " + tmp_str, "fileLost.txt");
+
+            }
+            catch (Exception ex)
+            {
+                //NEW CODE 03/27/2018 HABIB
+                Nondbfct.Nondbfct.WriteLog("Put_file::" + ex.Message, "RnaSftpClient.txt");
+                return (-1);
+            }
+            return (0);
+        }
+
+        public bool uploadFileToFTP(string remote_file, string remote_path, string local_file, string local_path)
+        {
+            try
+            {
+                using (SftpClient sftp = new SftpClient(m_url, m_portnum, m_usr, m_pwd))
+                {
+                    if (debugLogging == "Y")
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Connecting...", "SureCostDebug.txt");
+                    }
+
+                    sftp.Connect();
+                    FileInfo fi = new FileInfo(local_file);
+                    var connected = sftp.IsConnected;
+
+                    if (debugLogging == "Y")
+                    {
+                        if (connected)
+                        {
+                            Nondbfct.Nondbfct.WriteLog("Connected", "SureCostDebug.txt");
+                        }
+                        if (connected)
+                        {
+                            Nondbfct.Nondbfct.WriteLog("Not Connected", "SureCostDebug.txt");
+                        }
+                    }
+
+                    if (debugLogging == "Y")
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Changing remote directory...", "SureCostDebug.txt");
+                    }
+
+                    sftp.ChangeDirectory(remote_path);
+                    
+                    if (debugLogging == "Y")
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Uploading file...", "SureCostDebug.txt");
+                    }
+
+                    sftp.UploadFile(fi.OpenRead(), fi.Name, true);
+
+                    if (debugLogging == "Y")
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Disconnecting...", "SureCostDebug.txt");
+                    }
+
+                    sftp.Disconnect();
+
+                    if (debugLogging == "Y")
+                    {
+                        Nondbfct.Nondbfct.WriteLog("Disconnected", "SureCostDebug.txt");
+                    }
+                }
+            }
+            catch (Renci.SshNet.Common.SshConnectionException)
+            {
+                Nondbfct.Nondbfct.WriteLog("uploadFileToFTP::" + "Cannot connect to the server.", "RnaSftpClient.txt");
+                return false;
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+                Nondbfct.Nondbfct.WriteLog("uploadFileToFTP::" + "Unable to establish the socket.", "RnaSftpClient.txt");
+                return false;
+            }
+            catch (Renci.SshNet.Common.SshAuthenticationException)
+            {
+                Nondbfct.Nondbfct.WriteLog("uploadFileToFTP::" + "Authentication of SSH session failed.", "RnaSftpClient.txt");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Nondbfct.Nondbfct.WriteLog("uploadFileToFTP::" + ex.Message, "RnaSftpClient.txt");
+                return false;
+            }
+            return true;
+        }
+    }
+}

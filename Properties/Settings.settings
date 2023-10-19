@@ -1,0 +1,33 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="SureCostDispenseRpt.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="RnaDeptList" Type="System.String" Scope="User">
+      <Value Profile="(Default)">04</Value>
+    </Setting>
+    <Setting Name="Portnum" Type="System.String" Scope="User">
+      <Value Profile="(Default)">22</Value>
+    </Setting>
+    <Setting Name="URLAddress" Type="System.String" Scope="User">
+      <Value Profile="(Default)">sftp.surecost.net</Value>
+    </Setting>
+    <Setting Name="USERID" Type="System.String" Scope="User">
+      <Value Profile="(Default)">replace</Value>
+    </Setting>
+    <Setting Name="PWD" Type="System.String" Scope="User">
+      <Value Profile="(Default)">replace</Value>
+    </Setting>
+    <Setting Name="UploadToFTP" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Y</Value>
+    </Setting>
+    <Setting Name="RnaDB" Type="System.String" Scope="User">
+      <Value Profile="(Default)">RNA1</Value>
+    </Setting>
+    <Setting Name="Remotepath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">incoming</Value>
+    </Setting>
+    <Setting Name="EnableDebugLog" Type="System.String" Scope="User">
+      <Value Profile="(Default)">N</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>
